@@ -1,0 +1,16 @@
+﻿services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: climate_db
+    environment:
+      POSTGRES_DB: climate_adaptation
+      POSTGRES_USER: climate_user
+      POSTGRES_PASSWORD: climate_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+volumes:
+  postgres_data:
