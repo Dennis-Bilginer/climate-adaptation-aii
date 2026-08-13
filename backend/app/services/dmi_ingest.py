@@ -28,20 +28,28 @@ def get_raster_value(
         return float(value)
 
 
-if __name__ == "__main__":
-    future = get_raster_value(
-        "../data/raw/dmi/heatwave_2041_2070.tif",
-        12.5683,
-        55.6761,
-    )
-    reference = get_raster_value(
-        "../data/raw/dmi/heatwave_1981_2010.tif",
-        12.5683,
-        55.6761,
-    )
-    change = future - reference
+SCENARIOS = {
+    "RCP26": {
+        "future": "../data/raw/dmi/heatwave_2041_2070_rcp26.tif",
+        "reference": "../data/raw/dmi/heatwave_1981_2010_rcp26.tif",
+    },
+    "RCP45": {
+        "future": "../data/raw/dmi/heatwave_2041_2070_rcp45.tif",
+        "reference": "../data/raw/dmi/heatwave_1981_2010_rcp45.tif",
+    },
+}
 
-    print(f"Reference (1981-2010): {reference:.2f} days")
-    print(f"Future (2041-2070):    {future:.2f} days")
-    print(f"Change:                 +{change:.2f} days")
-    
+
+if __name__ == "__main__":
+    longitude = 12.5683
+    latitude = 55.6761
+
+    for scenario, paths in SCENARIOS.items():
+        future = get_raster_value(paths["future"], longitude, latitude)
+        reference = get_raster_value(paths["reference"], longitude, latitude)
+        change = future - reference
+
+        print(f"\n{scenario}")
+        print(f"  Reference (1981-2010): {reference:.2f} days")
+        print(f"  Future (2041-2070):    {future:.2f} days")
+        print(f"  Change:                 +{change:.2f} days")
