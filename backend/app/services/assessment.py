@@ -1,3 +1,4 @@
+from app.services.dawa_lookup import resolve_address
 from app.models.db import get_connection
 from app.risk.periods import year_to_dmi_period, period_label_to_range
 from app.risk.heat import (
@@ -11,21 +12,62 @@ from app.risk.heat import (
 from app.services.bbr_lookup import get_bbr_building
 
 
+
+
 def get_address(address_text: str):
+    """
+    Looks up an address in the local database first (fast path).
+    If not found, resolves it live via DAWA and inserts it so future
+    lookups for the same address are fast.
+    """
     conn = get_connection()
     cur = conn.cursor()
+
     cur.execute(
         """
-        SELECT id, address_text, latitude, longitude, geom
+        SELECT id, address_text, latitude, longitude
         FROM app.addresses
         WHERE address_text = %s
         """,
         (address_text,),
     )
     row = cur.fetchone()
+
+    if row:
+        cur.close()
+        conn.close()
+        return row
+
+    # Not found locally — resolve via DAWA and insert
+    resolved = resolve_address(address_text)
+    if resolved is None:
+        cur.close()
+        conn.close()
+        return None
+
+    cur.execute(
+        """
+        INSERT INTO app.addresses (id, address_text, city, latitude, longitude, geom)
+        VALUES (
+            gen_random_uuid(), %s, %s, %s, %s,
+            ST_Transform(ST_SetSRID(ST_MakePoint(%s, %s), 4326), 25832)
+        )
+        RETURNING id, address_text, latitude, longitude
+        """,
+        (
+            resolved["address_text"],
+            resolved["raw"]["adgangsadresse"]["kommune"]["navn"],
+            resolved["latitude"],
+            resolved["longitude"],
+            resolved["longitude"],
+            resolved["latitude"],
+        ),
+    )
+    new_row = cur.fetchone()
+    conn.commit()
     cur.close()
     conn.close()
-    return row
+    return new_row
 
 
 def get_heatwave_value(address_geom_id, scenario_code: str, period_label: str):
