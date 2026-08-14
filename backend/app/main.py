@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.risk.periods import year_to_dmi_period, period_label_to_range
+from app.services.assessment import run_assessment
 
 app = FastAPI(title="Climate Adaptation AI")
 
@@ -14,32 +14,17 @@ def root():
 
 
 @app.post("/api/assessments")
-def create_assessment(target_year: int = 2050):
-    # 1. Find property
-    # 2. Find building
-    # 3. Find climate grid
-    # 4. Retrieve DMI values
-    # 5. Calculate heat exposure
-    # 6. Calculate building susceptibility
-    # 7. Apply household protections
-    # 8. Calculate final risk
-    # 9. Find adaptations
-    # 10. Rank adaptations
-    # -- all still to be wired in; this is a placeholder shape for now
-
-    period = year_to_dmi_period(target_year)
-    period_range = period_label_to_range(period)
-
-    return {
-        "hazard": "heat",
-        "risk_score": 73,
-        "risk_category": "high",
-        "uncertainty": {
-            "low": 64,
-            "central": 73,
-            "high": 84,
-        },
-        "target_year": target_year,
-        "dmi_period": period,
-        "dmi_period_range": period_range,
-    }
+def create_assessment(
+    address_text: str = "Rådhuspladsen 1, København",
+    target_year: int = 2050,
+    scenario_code: str = "RCP45",
+    external_shading: bool = False,
+    mechanical_cooling: bool = False,
+):
+    return run_assessment(
+        address_text=address_text,
+        target_year=target_year,
+        scenario_code=scenario_code,
+        external_shading=external_shading,
+        mechanical_cooling=mechanical_cooling,
+    )
