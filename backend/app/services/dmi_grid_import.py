@@ -134,9 +134,21 @@ def _insert_batch(cur, rows):
 if __name__ == "__main__":
     import_raster_to_grid(
         raster_path="../data/raw/dmi/heatwave_2041_2070_rcp45.tif",
-        indicator_id=9,          # Heatwave days
-        scenario_code="RCP45",
-        period_label="Mid century",
-        percentile=50,
-        unit="days",
+        indicator_id=9, scenario_code="RCP45", period_label="Mid century",
+        percentile=50, unit="days",
+    )
+    import_raster_to_grid(
+        raster_path="../data/raw/dmi/heatwave_1981_2010_rcp45.tif",
+        indicator_id=9, scenario_code="RCP45", period_label="Reference",
+        percentile=50, unit="days",
+    )
+    import_raster_to_grid(
+        raster_path="../data/raw/dmi/heatwave_2041_2070_rcp26.tif",
+        indicator_id=9, scenario_code="RCP26", period_label="Mid century",
+        percentile=50, unit="days",
+    )
+    import_raster_to_grid(
+        raster_path="../data/raw/dmi/heatwave_1981_2010_rcp26.tif",
+        indicator_id=9, scenario_code="RCP26", period_label="Reference",
+        percentile=50, unit="days",
     )
