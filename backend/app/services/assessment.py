@@ -12,6 +12,14 @@ from app.risk.heat import (
 )
 from app.services.bbr_lookup import get_bbr_building
 
+from app.risk.flood import (
+    normalize_cloudburst_change,
+    calculate_flood_exposure,
+    calculate_building_flood_susceptibility,
+    calculate_flood_protection,
+    calculate_flood_risk,
+    categorize_risk as categorize_flood_risk,
+)
 
 
 
@@ -159,6 +167,7 @@ def run_assessment(
     future_highesttemp = get_indicator_value(address["id"], 4, scenario_code, period_label)
     reference_highesttemp = get_indicator_value(address["id"], 4, scenario_code, "Reference")
 
+
     if future_heatwave is None or reference_heatwave is None:
         return {
             "error": "No climate grid data found for this location/scenario/period."
@@ -166,6 +175,7 @@ def run_assessment(
 
     heatwave_score = normalize_heatwave_change(reference_heatwave, future_heatwave)
 
+    
     # For temperature indicators, use absolute change (future - reference), not percent change
     mean_temp_score = (
         normalize_temperature_change(future_meantemp - reference_meantemp)
@@ -197,9 +207,50 @@ def run_assessment(
     category = categorize_risk(risk_score)
 
     adaptations = get_ranked_adaptations("heat")
+    # --- FLOOD ---
+    future_cloudburst = get_indicator_value(address["id"], 107, scenario_code, period_label)
+    reference_cloudburst = get_indicator_value(address["id"], 107, scenario_code, "Reference")
 
+    flood_result = None
+    if future_cloudburst is not None and reference_cloudburst is not None:
+        cloudburst_score = normalize_cloudburst_change(reference_cloudburst, future_cloudburst)
+        flood_exposure = calculate_flood_exposure(cloudburst_score)
+
+        # basement not yet sourced from BBR — placeholder until wired in
+        flood_susceptibility = calculate_building_flood_susceptibility(
+            basement=None, building_age=building_age
+        )
+        flood_protection = calculate_flood_protection(
+            has_flood_barriers=False, has_improved_drainage=False
+        )
+
+        flood_risk_score = calculate_flood_risk(
+            flood_exposure, flood_susceptibility, flood_protection
+        )
+        flood_category = categorize_flood_risk(flood_risk_score)
+
+        flood_adaptations = get_ranked_adaptations("flood")
+
+        flood_result = {
+            "risk_score": round(flood_risk_score, 1),
+            "risk_category": flood_category,
+            "cloudburst_days": {
+                "reference": reference_cloudburst,
+                "future": future_cloudburst,
+            },
+            "recommended_adaptations": [
+                {
+                    "name": a["name"],
+                    "description": a["description"],
+                    "cost_category": a["cost_category"],
+                    "cost_range_dkk": f"{a['min_cost_dkk']:.0f}-{a['max_cost_dkk']:.0f}",
+                    "expected_risk_reduction": a["risk_reduction_expected"],
+                }
+                for a in flood_adaptations
+            ],
+        }
+        
     result = {
-        "hazard": "heat",
         "address": address["address_text"],
         "target_year": target_year,
         "dmi_period": period_label,
@@ -211,29 +262,34 @@ def run_assessment(
             "type": building_type,
             "source": "BBR" if bbr_note is None else "fallback default",
         },
-        "climate_indicators": {
-            "heatwave_days": {"reference": reference_heatwave, "future": future_heatwave},
-            "mean_temperature_c": {"reference": reference_meantemp, "future": future_meantemp},
-            "daily_max_temperature_c": {"reference": reference_dailymax, "future": future_dailymax},
-            "highest_temperature_c": {"reference": reference_highesttemp, "future": future_highesttemp},
+        "hazards": {
+            "heat": {
+                "risk_score": round(risk_score, 1),
+                "risk_category": category,
+                "climate_indicators": {
+                    "heatwave_days": {"reference": reference_heatwave, "future": future_heatwave},
+                    "mean_temperature_c": {"reference": reference_meantemp, "future": future_meantemp},
+                    "daily_max_temperature_c": {"reference": reference_dailymax, "future": future_dailymax},
+                    "highest_temperature_c": {"reference": reference_highesttemp, "future": future_highesttemp},
+                },
+                "uncertainty": {
+                    "low": round(max(0, risk_score - 9), 1),
+                    "central": round(risk_score, 1),
+                    "high": round(min(100, risk_score + 11), 1),
+                },
+                "recommended_adaptations": [
+                    {
+                        "name": a["name"],
+                        "description": a["description"],
+                        "cost_category": a["cost_category"],
+                        "cost_range_dkk": f"{a['min_cost_dkk']:.0f}-{a['max_cost_dkk']:.0f}",
+                        "expected_risk_reduction": a["risk_reduction_expected"],
+                    }
+                    for a in adaptations
+                ],
+            },
+            "flood": flood_result,
         },
-        "risk_score": round(risk_score, 1),
-        "risk_category": category,
-        "uncertainty": {
-            "low": round(max(0, risk_score - 9), 1),
-            "central": round(risk_score, 1),
-            "high": round(min(100, risk_score + 11), 1),
-        },
-        "recommended_adaptations": [
-            {
-                "name": a["name"],
-                "description": a["description"],
-                "cost_category": a["cost_category"],
-                "cost_range_dkk": f"{a['min_cost_dkk']:.0f}-{a['max_cost_dkk']:.0f}",
-                "expected_risk_reduction": a["risk_reduction_expected"],
-            }
-            for a in adaptations
-        ],
     }
 
     if bbr_note:

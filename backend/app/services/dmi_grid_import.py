@@ -142,6 +142,8 @@ if __name__ == "__main__":
         ("../data/raw/dmi/dailymax_1981_2010_rcp45.tif", 2, "RCP45", "Reference"),
         ("../data/raw/dmi/highesttemp_2041_2070_rcp45.tif", 4, "RCP45", "Mid century"),
         ("../data/raw/dmi/highesttemp_1981_2010_rcp45.tif", 4, "RCP45", "Reference"),
+        ("../data/raw/dmi/cloudburst_2041_2070_rcp45.tif", 107, "RCP45", "Mid century"),
+        ("../data/raw/dmi/cloudburst_1981_2010_rcp45.tif", 107, "RCP45", "Reference"),
 
         # RCP26
         ("../data/raw/dmi/heatwave_2041_2070_rcp26.tif", 9, "RCP26", "Mid century"),
@@ -152,6 +154,8 @@ if __name__ == "__main__":
         ("../data/raw/dmi/dailymax_1981_2010_rcp26.tif", 2, "RCP26", "Reference"),
         ("../data/raw/dmi/highesttemp_2041_2070_rcp26.tif", 4, "RCP26", "Mid century"),
         ("../data/raw/dmi/highesttemp_1981_2010_rcp26.tif", 4, "RCP26", "Reference"),
+        ("../data/raw/dmi/cloudburst_2041_2070_rcp26.tif", 107, "RCP26", "Mid century"),
+        ("../data/raw/dmi/cloudburst_1981_2010_rcp26.tif", 107, "RCP26", "Reference"),
     ]
 
     for raster_path, indicator_id, scenario_code, period_label in imports:
