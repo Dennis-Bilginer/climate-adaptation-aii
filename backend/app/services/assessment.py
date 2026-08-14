@@ -3,6 +3,7 @@ from app.models.db import get_connection
 from app.risk.periods import year_to_dmi_period, period_label_to_range
 from app.risk.heat import (
     normalize_heatwave_change,
+    normalize_temperature_change,
     calculate_climate_exposure,
     calculate_building_susceptibility,
     calculate_protection,
@@ -70,7 +71,7 @@ def get_address(address_text: str):
     return new_row
 
 
-def get_heatwave_value(address_geom_id, scenario_code: str, period_label: str):
+def get_indicator_value(address_geom_id, indicator_id: int, scenario_code: str, period_label: str):
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
@@ -79,13 +80,13 @@ def get_heatwave_value(address_geom_id, scenario_code: str, period_label: str):
         FROM climate.observations o
         JOIN app.addresses a ON ST_Contains(o.geom, a.geom)
         WHERE a.id = %s
-          AND o.indicator_id = 9
+          AND o.indicator_id = %s
           AND o.scenario_id = (SELECT id FROM climate.scenarios WHERE code = %s)
           AND o.period_id = (SELECT id FROM climate.periods WHERE label = %s)
           AND o.percentile = 50
         LIMIT 1
         """,
-        (address_geom_id, scenario_code, period_label),
+        (address_geom_id, indicator_id, scenario_code, period_label),
     )
     row = cur.fetchone()
     cur.close()
@@ -142,19 +143,45 @@ def run_assessment(
     period_label = year_to_dmi_period(target_year)
     period_range = period_label_to_range(period_label)
 
-    future_value = get_heatwave_value(address["id"], scenario_code, period_label)
-    reference_value = get_heatwave_value(address["id"], scenario_code, "Reference")
+    # Indicator 9: Heatwave days
+    future_heatwave = get_indicator_value(address["id"], 9, scenario_code, period_label)
+    reference_heatwave = get_indicator_value(address["id"], 9, scenario_code, "Reference")
 
-    if future_value is None or reference_value is None:
+    # Indicator 1: Mean temperature
+    future_meantemp = get_indicator_value(address["id"], 1, scenario_code, period_label)
+    reference_meantemp = get_indicator_value(address["id"], 1, scenario_code, "Reference")
+
+    # Indicator 2: Daily maximum temperature
+    future_dailymax = get_indicator_value(address["id"], 2, scenario_code, period_label)
+    reference_dailymax = get_indicator_value(address["id"], 2, scenario_code, "Reference")
+
+    # Indicator 4: Highest temperature
+    future_highesttemp = get_indicator_value(address["id"], 4, scenario_code, period_label)
+    reference_highesttemp = get_indicator_value(address["id"], 4, scenario_code, "Reference")
+
+    if future_heatwave is None or reference_heatwave is None:
         return {
             "error": "No climate grid data found for this location/scenario/period."
         }
 
-    heatwave_score = normalize_heatwave_change(reference_value, future_value)
+    heatwave_score = normalize_heatwave_change(reference_heatwave, future_heatwave)
 
-    highest_temp_score = 50
-    daily_max_score = 50
-    mean_temp_score = 50
+    # For temperature indicators, use absolute change (future - reference), not percent change
+    mean_temp_score = (
+        normalize_temperature_change(future_meantemp - reference_meantemp)
+        if future_meantemp is not None and reference_meantemp is not None
+        else 50
+    )
+    daily_max_score = (
+        normalize_temperature_change(future_dailymax - reference_dailymax)
+        if future_dailymax is not None and reference_dailymax is not None
+        else 50
+    )
+    highest_temp_score = (
+        normalize_temperature_change(future_highesttemp - reference_highesttemp)
+        if future_highesttemp is not None and reference_highesttemp is not None
+        else 50
+    )
 
     exposure = calculate_climate_exposure(
         heatwave_score, highest_temp_score, daily_max_score, mean_temp_score
@@ -184,9 +211,11 @@ def run_assessment(
             "type": building_type,
             "source": "BBR" if bbr_note is None else "fallback default",
         },
-        "heatwave_days": {
-            "reference": reference_value,
-            "future": future_value,
+        "climate_indicators": {
+            "heatwave_days": {"reference": reference_heatwave, "future": future_heatwave},
+            "mean_temperature_c": {"reference": reference_meantemp, "future": future_meantemp},
+            "daily_max_temperature_c": {"reference": reference_dailymax, "future": future_dailymax},
+            "highest_temperature_c": {"reference": reference_highesttemp, "future": future_highesttemp},
         },
         "risk_score": round(risk_score, 1),
         "risk_category": category,

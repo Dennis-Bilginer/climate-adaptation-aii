@@ -132,23 +132,35 @@ def _insert_batch(cur, rows):
 
 
 if __name__ == "__main__":
-    import_raster_to_grid(
-        raster_path="../data/raw/dmi/heatwave_2041_2070_rcp45.tif",
-        indicator_id=9, scenario_code="RCP45", period_label="Mid century",
-        percentile=50, unit="days",
-    )
-    import_raster_to_grid(
-        raster_path="../data/raw/dmi/heatwave_1981_2010_rcp45.tif",
-        indicator_id=9, scenario_code="RCP45", period_label="Reference",
-        percentile=50, unit="days",
-    )
-    import_raster_to_grid(
-        raster_path="../data/raw/dmi/heatwave_2041_2070_rcp26.tif",
-        indicator_id=9, scenario_code="RCP26", period_label="Mid century",
-        percentile=50, unit="days",
-    )
-    import_raster_to_grid(
-        raster_path="../data/raw/dmi/heatwave_1981_2010_rcp26.tif",
-        indicator_id=9, scenario_code="RCP26", period_label="Reference",
-        percentile=50, unit="days",
-    )
+    imports = [
+        # RCP45
+        ("../data/raw/dmi/heatwave_2041_2070_rcp45.tif", 9, "RCP45", "Mid century"),
+        ("../data/raw/dmi/heatwave_1981_2010_rcp45.tif", 9, "RCP45", "Reference"),
+        ("../data/raw/dmi/meantemp_2041_2070_rcp45.tif", 1, "RCP45", "Mid century"),
+        ("../data/raw/dmi/meantemp_1981_2010_rcp45.tif", 1, "RCP45", "Reference"),
+        ("../data/raw/dmi/dailymax_2041_2070_rcp45.tif", 2, "RCP45", "Mid century"),
+        ("../data/raw/dmi/dailymax_1981_2010_rcp45.tif", 2, "RCP45", "Reference"),
+        ("../data/raw/dmi/highesttemp_2041_2070_rcp45.tif", 4, "RCP45", "Mid century"),
+        ("../data/raw/dmi/highesttemp_1981_2010_rcp45.tif", 4, "RCP45", "Reference"),
+
+        # RCP26
+        ("../data/raw/dmi/heatwave_2041_2070_rcp26.tif", 9, "RCP26", "Mid century"),
+        ("../data/raw/dmi/heatwave_1981_2010_rcp26.tif", 9, "RCP26", "Reference"),
+        ("../data/raw/dmi/meantemp_2041_2070_rcp26.tif", 1, "RCP26", "Mid century"),
+        ("../data/raw/dmi/meantemp_1981_2010_rcp26.tif", 1, "RCP26", "Reference"),
+        ("../data/raw/dmi/dailymax_2041_2070_rcp26.tif", 2, "RCP26", "Mid century"),
+        ("../data/raw/dmi/dailymax_1981_2010_rcp26.tif", 2, "RCP26", "Reference"),
+        ("../data/raw/dmi/highesttemp_2041_2070_rcp26.tif", 4, "RCP26", "Mid century"),
+        ("../data/raw/dmi/highesttemp_1981_2010_rcp26.tif", 4, "RCP26", "Reference"),
+    ]
+
+    for raster_path, indicator_id, scenario_code, period_label in imports:
+        print(f"\nImporting {raster_path} (indicator {indicator_id}, {scenario_code}, {period_label})...")
+        import_raster_to_grid(
+            raster_path=raster_path,
+            indicator_id=indicator_id,
+            scenario_code=scenario_code,
+            period_label=period_label,
+            percentile=50,
+            unit="C" if indicator_id in (1, 2, 4) else "days",
+        )
