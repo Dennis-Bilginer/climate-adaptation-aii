@@ -1,5 +1,6 @@
 from app.services.dawa_lookup import resolve_address
 from app.models.db import get_connection
+from app.services.land_cover import get_heat_modifier
 from app.risk.periods import year_to_dmi_period, period_label_to_range
 from app.risk.heat import (
     normalize_heatwave_change,
@@ -193,12 +194,19 @@ def run_assessment(
         else 50
     )
 
+    land_cover = get_heat_modifier(address["longitude"], address["latitude"])
+
     exposure = calculate_climate_exposure(
-        heatwave_score, highest_temp_score, daily_max_score, mean_temp_score
+        heatwave_score, highest_temp_score, daily_max_score, mean_temp_score,
+        land_cover_adjustment=land_cover["score_adjustment"],
     )
 
     susceptibility = calculate_building_susceptibility(
-        building_age, floor_count, building_type
+        building_age,
+        floor_count,
+        building_type,
+        wall_heat_risk=bbr_data.get("wall_heat_risk", "unknown") if "error" not in bbr_data else "unknown",
+        roof_heat_risk=bbr_data.get("roof_heat_risk", "unknown") if "error" not in bbr_data else "unknown",
     )
 
     protection = calculate_protection(external_shading, mechanical_cooling)
@@ -249,7 +257,7 @@ def run_assessment(
                 for a in flood_adaptations
             ],
         }
-        
+
     result = {
         "address": address["address_text"],
         "target_year": target_year,
@@ -266,6 +274,10 @@ def run_assessment(
             "heat": {
                 "risk_score": round(risk_score, 1),
                 "risk_category": category,
+                "local_land_cover": {
+                    "category": land_cover["heat_category"],
+                    "adjustment_applied": land_cover["score_adjustment"],
+                },
                 "climate_indicators": {
                     "heatwave_days": {"reference": reference_heatwave, "future": future_heatwave},
                     "mean_temperature_c": {"reference": reference_meantemp, "future": future_meantemp},

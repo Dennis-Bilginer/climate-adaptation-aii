@@ -54,16 +54,25 @@ def calculate_climate_exposure(
     highest_temp_score,
     daily_max_score,
     mean_temp_score,
+    land_cover_adjustment=0,
 ):
-    return (
+    base_exposure = (
         0.40 * heatwave_score
         + 0.30 * highest_temp_score
         + 0.20 * daily_max_score
         + 0.10 * mean_temp_score
     )
 
+    return max(0, min(100, base_exposure + land_cover_adjustment))
 
-def calculate_building_susceptibility(building_age, floor_count, building_type):
+
+def calculate_building_susceptibility(
+    building_age,
+    floor_count,
+    building_type,
+    wall_heat_risk="unknown",
+    roof_heat_risk="unknown",
+):
     score = 50
 
     if building_age < 1980:
@@ -78,6 +87,10 @@ def calculate_building_susceptibility(building_age, floor_count, building_type):
 
     if building_type == "detached":
         score -= 5
+
+    risk_adjustment = {"low": -5, "medium": 0, "high": 5, "unknown": 0}
+    score += risk_adjustment.get(wall_heat_risk, 0)
+    score += risk_adjustment.get(roof_heat_risk, 0)
 
     return max(0, min(100, score))
 
