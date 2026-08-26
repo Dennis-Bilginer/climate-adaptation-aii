@@ -30,6 +30,37 @@ USE_CODE_TO_BUILDING_TYPE = {
     "321": "public",         # Bygning til kontor, handel, offentlig administration mv.
 }
 
+# Confirmed against BBR's official kodeliste (ki.bbr.dk/kodelister-i-bbr/0/1/0/YdervaeggenesMateriale)
+WALL_MATERIAL_HEAT_RISK = {
+    "1": "low",      # Mursten (brick) - good thermal mass
+    "2": "medium",   # Letbetonsten (lightweight concrete)
+    "3": "medium",   # Fibercement inkl. asbest
+    "4": "high",     # Bindingsværk (timber frame) - less thermal mass
+    "5": "high",     # Træ (wood)
+    "6": "medium",   # Betonelementer (concrete elements)
+    "8": "high",     # Metal - poor insulation, absorbs heat
+    "10": "medium",  # Fibercement uden asbest
+    "11": "high",    # Plastmaterialer (plastic)
+    "12": "high",    # Glas (glass) - significant heat gain
+    "80": "unknown", # Ingen (none registered)
+    "90": "unknown", # Andet materiale (other)
+}
+
+# Confirmed against BBR's official kodeliste (field 212, Tagdaekningsmateriale)
+ROOF_MATERIAL_HEAT_RISK = {
+    "1": "high",     # Built-up (flat roof) - typically dark, absorbs heat, poor ventilation
+    "2": "high",     # Tagpap (roofing felt) - dark, absorbs heat
+    "3": "medium",   # Fibercement inkl. asbest
+    "4": "medium",   # Cementsten (concrete tiles)
+    "5": "low",      # Tegl (clay tile) - lighter colored, better heat reflection, ventilated
+    "6": "high",     # Metalplader (metal sheets) - poor insulation, absorbs/conducts heat
+    "7": "low",      # Stråtag (thatch) - excellent natural insulation
+    "10": "medium",  # Fibercement asbestfri
+    "11": "high",    # PVC - poor thermal performance
+    "12": "high",    # Glas (glass) - significant heat gain
+    "90": "unknown", # Andet (other) - genuinely unknown
+}
+
 
 def get_bbr_building(address_text: str):
     address = resolve_address(address_text)
@@ -51,6 +82,8 @@ def get_bbr_building(address_text: str):
           byg026Opfoerelsesaar
           byg054AntalEtager
           byg021BygningensAnvendelse
+          byg032YdervaeggensMateriale
+          byg033Tagdaekningsmateriale
           id_lokalId
           husnummer
         }
@@ -87,6 +120,14 @@ def get_bbr_building(address_text: str):
         "floor_count": main_building.get("byg054AntalEtager"),
         "building_use_code": use_code,
         "building_type": USE_CODE_TO_BUILDING_TYPE.get(use_code, "unknown"),
+        "wall_material_code": main_building.get("byg032YdervaeggensMateriale"),
+        "roof_material_code": main_building.get("byg033Tagdaekningsmateriale"),
+        "wall_heat_risk": WALL_MATERIAL_HEAT_RISK.get(
+            main_building.get("byg032YdervaeggensMateriale"), "unknown"
+        ),
+        "roof_heat_risk": ROOF_MATERIAL_HEAT_RISK.get(
+            main_building.get("byg033Tagdaekningsmateriale"), "unknown"
+        ),
         "bbr_id": main_building.get("id_lokalId"),
     }
 
