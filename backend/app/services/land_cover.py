@@ -2,9 +2,15 @@
 Land cover classification for local heat exposure modifiers.
 Based on DCE/Aarhus University's Basemap05 (2024), aggregated
 category codes (C_07 field in the raster's value attribute table).
+
+Uses area-averaging (a small window around the point) rather than
+a single pixel, since address points often sit on a road (the
+building's street access point per DAWA), which would otherwise
+bias every result toward "hot" even for houses with green gardens.
 """
 
 import os
+import numpy as np
 import rasterio
 from rasterio.windows import Window
 from pyproj import Transformer
@@ -68,42 +74,108 @@ HEAT_CATEGORY_TO_SCORE_ADJUSTMENT = {
 
 def get_land_cover_at_point(longitude: float, latitude: float):
     """
-    Efficiently reads a single pixel from the (very large) land cover
-    raster using a windowed read, so the entire multi-GB file is never
-    loaded into memory.
+    Single-pixel read (kept for debugging/comparison purposes).
+    Prefer get_land_cover_area() for actual risk scoring.
     """
     with rasterio.open(RASTER_PATH) as src:
         transformer = Transformer.from_crs("EPSG:4326", src.crs, always_xy=True)
         x, y = transformer.transform(longitude, latitude)
-
         row, col = src.index(x, y)
 
         window = Window(col, row, 1, 1)
         value = src.read(1, window=window)[0, 0]
 
-        # Handle nodata
         if value == src.nodata:
             return None
 
         return int(value)
 
 
-def get_heat_modifier(longitude: float, latitude: float):
-    value = get_land_cover_at_point(longitude, latitude)
-    if value is None:
-        return {"land_cover_value": None, "heat_category": "unknown", "score_adjustment": 0}
+def get_land_cover_area(longitude: float, latitude: float, radius_pixels: int = 3):
+    """
+    Samples a window of pixels around the point (default: 7x7 at
+    10m resolution = ~70m across) instead of a single pixel, and
+    returns a weighted-average heat adjustment based on the mix of
+    land cover found nearby.
+    """
+    with rasterio.open(RASTER_PATH) as src:
+        transformer = Transformer.from_crs("EPSG:4326", src.crs, always_xy=True)
+        x, y = transformer.transform(longitude, latitude)
+        row, col = src.index(x, y)
 
-    category = HEAT_CATEGORY_BY_VALUE.get(value, "unknown")
-    adjustment = HEAT_CATEGORY_TO_SCORE_ADJUSTMENT.get(category, 0)
+        size = radius_pixels * 2 + 1
+        window = Window(col - radius_pixels, row - radius_pixels, size, size)
 
+        try:
+            block = src.read(1, window=window)
+        except Exception:
+            # Window falls outside raster bounds (e.g. address near
+            # the edge of Denmark's coverage) - fall back to single pixel
+            single = get_land_cover_at_point(longitude, latitude)
+            if single is None:
+                return {
+                    "dominant_category": "unknown",
+                    "category_breakdown": {},
+                    "score_adjustment": 0,
+                }
+            category = HEAT_CATEGORY_BY_VALUE.get(single, "unknown")
+            return {
+                "dominant_category": category,
+                "category_breakdown": {category: 100.0},
+                "score_adjustment": HEAT_CATEGORY_TO_SCORE_ADJUSTMENT.get(category, 0),
+            }
+
+        if src.nodata is not None:
+            block = block[block != src.nodata]
+
+        if block.size == 0:
+            return {
+                "dominant_category": "unknown",
+                "category_breakdown": {},
+                "score_adjustment": 0,
+            }
+
+        values, counts = np.unique(block, return_counts=True)
+        total = counts.sum()
+
+        category_counts = {}
+        for val, count in zip(values, counts):
+            category = HEAT_CATEGORY_BY_VALUE.get(int(val), "unknown")
+            category_counts[category] = category_counts.get(category, 0) + int(count)
+
+        weighted_adjustment = sum(
+            HEAT_CATEGORY_TO_SCORE_ADJUSTMENT.get(cat, 0) * count / total
+            for cat, count in category_counts.items()
+        )
+
+        dominant_category = max(category_counts, key=category_counts.get)
+
+        return {
+            "dominant_category": dominant_category,
+            "category_breakdown": {
+                k: round(float(v) / float(total) * 100, 1) for k, v in category_counts.items()
+            },
+            "score_adjustment": round(float(weighted_adjustment), 1),
+        }
+
+
+def get_heat_modifier(longitude: float, latitude: float, radius_pixels: int = 3):
+    """
+    Main entry point used by assessment.py. Returns the area-averaged
+    heat modifier for a given point.
+    """
+    result = get_land_cover_area(longitude, latitude, radius_pixels=radius_pixels)
     return {
-        "land_cover_value": value,
-        "heat_category": category,
-        "score_adjustment": adjustment,
+        "heat_category": result["dominant_category"],
+        "category_breakdown": result["category_breakdown"],
+        "score_adjustment": result["score_adjustment"],
     }
 
 
 if __name__ == "__main__":
-    # Rådhuspladsen 1 - expect "hot" (dense urban center)
-    result = get_heat_modifier(12.56957768, 55.6756275)
-    print("Rådhuspladsen 1:", result)
+    # Rådhuspladsen 1 - expect mostly "hot" (dense urban center)
+    print("Rådhuspladsen 1:", get_heat_modifier(12.56957768, 55.6756275))
+
+    # Dyrehavevej 1 - address point sits on the road, but averaging
+    # nearby pixels should now show some "cool" mixed in from the park
+    print("Dyrehavevej 1:", get_heat_modifier(12.58742527, 55.77750907))
