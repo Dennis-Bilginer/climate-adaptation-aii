@@ -75,19 +75,29 @@ def get_flow_accumulation(longitude: float, latitude: float):
     return _get_feature_info("dhm_flow_ekstremregn", longitude, latitude)
 
 
-def get_bluespot_depth(longitude: float, latitude: float, scenario_mm: int = 30):
+def get_bluespot_depth(longitude: float, latitude: float):
     """
-    Meters of rain needed before this depression floods, for a given
-    rain scenario. Lower value = floods more easily = higher risk.
+    Meters of rain needed before this depression floods. This is a
+    fixed physical property of the location - NOT scenario-dependent.
+    (Confirmed by testing: identical value_0 returned regardless of
+    which scenario style was requested - the style only changes map
+    color-coding for visualization, not the underlying data value.)
+
+    IMPORTANT LIMITATION (per SDFE's own documentation): Bluespot does
+    NOT account for drainage or infiltration - it assumes a sealed
+    depression with no sewer runoff or soil absorption. This makes it
+    a conservative/worst-case screening tool. Real-world flooding at
+    a given rainfall amount is likely somewhat less severe than this
+    threshold suggests, since actual drainage removes some water.
+
     None means this point isn't in a mapped depression at all.
     """
-    style = f"bluespot_ekstremregn_0_{scenario_mm:03d}"
-    return _get_feature_info("dhm_bluespot_ekstremregn", longitude, latitude, style=style)
-
+    return _get_feature_info("dhm_bluespot_ekstremregn", longitude, latitude, style="")
 
 def get_terrain_flood_modifier(longitude: float, latitude: float):
     flow = get_flow_accumulation(longitude, latitude)
-    bluespot = get_bluespot_depth(longitude, latitude, scenario_mm=30)
+    bluespot = get_bluespot_depth(longitude, latitude)
+    # ... rest stays the same
 
     adjustment = 0.0
 

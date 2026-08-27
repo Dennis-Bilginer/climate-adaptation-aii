@@ -40,7 +40,7 @@ def get_address(address_text: str):
 
     cur.execute(
         """
-        SELECT id, address_text, latitude, longitude
+        SELECT id, address_text, latitude, longitude, city
         FROM app.addresses
         WHERE address_text = %s
         """,
@@ -67,7 +67,7 @@ def get_address(address_text: str):
             gen_random_uuid(), %s, %s, %s, %s,
             ST_Transform(ST_SetSRID(ST_MakePoint(%s, %s), 4326), 25832)
         )
-        RETURNING id, address_text, latitude, longitude
+        RETURNING id, address_text, latitude, longitude, city
         """,
         (
             resolved["address_text"],
@@ -245,6 +245,25 @@ def run_assessment(
         flood_land_cover = get_flood_modifier(address["longitude"], address["latitude"])
         terrain_modifier = get_terrain_flood_modifier(address["longitude"], address["latitude"])
 
+        bluespot_threshold_mm = (
+            terrain_modifier["bluespot_fill_depth_m"] * 1000
+            if terrain_modifier["bluespot_fill_depth_m"] is not None
+            else None
+        )
+
+        flood_frequency = {}
+        kommune = address.get("city")
+
+        if bluespot_threshold_mm is not None and kommune:
+            for compare_scenario in ["RCP26", "RCP45"]:
+                for compare_period in ["Reference", period_label]:
+                    key = f"{compare_scenario}_{compare_period.replace(' ', '_')}"
+                    flood_frequency[key] = get_flood_return_period(
+                        kommune, compare_scenario, compare_period, bluespot_threshold_mm
+                    )
+        elif bluespot_threshold_mm is not None and not kommune:
+            flood_frequency["note"] = "Municipality unknown for this address - cannot estimate frequency"
+
         flood_exposure = calculate_flood_exposure(
             cloudburst_score,
             land_cover_adjustment=flood_land_cover["score_adjustment"],
@@ -282,11 +301,14 @@ def run_assessment(
                 "bluespot_fill_depth_m": terrain_modifier["bluespot_fill_depth_m"],
                 "flow_accumulation_m2": terrain_modifier["flow_accumulation_m2"],
                 "adjustment_applied": terrain_modifier["score_adjustment"],
+                "note": "Bluespot is a worst-case screening tool that does not account for "
+                        "drainage or soil infiltration - actual flood risk may be somewhat lower.",
             },
             "cloudburst_days": {
                 "reference": reference_cloudburst,
                 "future": future_cloudburst,
             },
+            "flood_frequency_estimate": flood_frequency,
             "recommended_adaptations": [
                 {
                     "name": a["name"],
@@ -356,3 +378,60 @@ def run_assessment(
         result["bbr_note"] = bbr_note
 
     return result
+def get_flood_return_period(kommune_navn: str, scenario_code: str, period_label: str, threshold_mm: float):
+    """
+    Estimates roughly how often (in years) a rainfall event equal to
+    threshold_mm is expected, using DMI's daily precipitation return
+    period indicators (157=2yr, 158=5yr, 159=10yr, 160=20yr,
+    161=50yr, 162=100yr).
+    """
+    return_period_indicators = [
+        (2, 157), (5, 158), (10, 159), (20, 160), (50, 161), (100, 162)
+    ]
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    values = {}
+    for years, indicator_id in return_period_indicators:
+        cur.execute(
+            """
+            SELECT median
+            FROM climate.municipal_observations
+            WHERE kommune_navn = %s
+              AND indicator_id = %s
+              AND scenario_code = %s
+              AND period_label = %s
+              AND season = 'Hele året'
+            """,
+            (kommune_navn, indicator_id, scenario_code, period_label),
+        )
+        row = cur.fetchone()
+        if row and row["median"] is not None:
+            values[years] = float(row["median"])
+
+    cur.close()
+    conn.close()
+
+    if not values:
+        return None
+
+    sorted_years = sorted(values.keys())
+
+    # Below the smallest known return period's rainfall amount ->
+    # floods more often than even a 2-year event
+    if threshold_mm <= values[sorted_years[0]]:
+        return f"more often than every {sorted_years[0]} years"
+
+    # Above the largest -> rarer than the biggest event we have data for
+    if threshold_mm >= values[sorted_years[-1]]:
+        return f"rarer than every {sorted_years[-1]} years"
+
+    # Otherwise, find the bracket it falls into
+    for i in range(len(sorted_years) - 1):
+        lo_years, hi_years = sorted_years[i], sorted_years[i + 1]
+        lo_val, hi_val = values[lo_years], values[hi_years]
+        if lo_val <= threshold_mm <= hi_val:
+            return f"roughly every {lo_years}-{hi_years} years"
+
+    return None
