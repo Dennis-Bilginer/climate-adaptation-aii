@@ -10,7 +10,10 @@ from app.risk.heat import (
     calculate_protection,
     calculate_heat_risk,
     categorize_risk,
+    calculate_heat_index,
+    normalize_heat_index_change,
 )
+
 from app.services.bbr_lookup import get_bbr_building
 
 from app.risk.flood import (
@@ -194,10 +197,24 @@ def run_assessment(
         else 50
     )
 
+        # "Feels like" temperature using DMI's published average Danish
+    # summer relative humidity (75%) as a national baseline assumption
+    heat_index_score = 50
+    reference_heat_index = None
+    future_heat_index = None
+
+    if future_highesttemp is not None and reference_highesttemp is not None:
+        reference_heat_index = calculate_heat_index(reference_highesttemp)
+        future_heat_index = calculate_heat_index(future_highesttemp)
+        heat_index_score = normalize_heat_index_change(reference_heat_index, future_heat_index)
+
     land_cover = get_heat_modifier(address["longitude"], address["latitude"])
 
     exposure = calculate_climate_exposure(
-        heatwave_score, highest_temp_score, daily_max_score, mean_temp_score,
+        heatwave_score,
+        heat_index_score,  # was highest_temp_score - now humidity-adjusted
+        daily_max_score,
+        mean_temp_score,
         land_cover_adjustment=land_cover["score_adjustment"],
     )
 
@@ -276,6 +293,7 @@ def run_assessment(
                 "risk_category": category,
                 "local_land_cover": {
                     "category": land_cover["heat_category"],
+                    "breakdown": land_cover["category_breakdown"],
                     "adjustment_applied": land_cover["score_adjustment"],
                 },
                 "climate_indicators": {
@@ -283,6 +301,12 @@ def run_assessment(
                     "mean_temperature_c": {"reference": reference_meantemp, "future": future_meantemp},
                     "daily_max_temperature_c": {"reference": reference_dailymax, "future": future_dailymax},
                     "highest_temperature_c": {"reference": reference_highesttemp, "future": future_highesttemp},
+                    "feels_like_highest_temperature_c": {
+                        "reference": reference_heat_index,
+                        "future": future_heat_index,
+                        "assumed_relative_humidity_pct": 75,
+                        "note": "Based on DMI's published average Danish summer humidity, not location-specific",
+                    },
                 },
                 "uncertainty": {
                     "low": round(max(0, risk_score - 9), 1),

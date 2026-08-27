@@ -48,6 +48,56 @@ def normalize_temperature_change(change):
     else:
         return 100
 
+def calculate_heat_index(temperature_c, relative_humidity_pct=75):
+    temperature_c = float(temperature_c)
+    relative_humidity_pct = float(relative_humidity_pct)
+
+    """
+    Computes "feels like" temperature (heat index) from air temperature
+    and relative humidity, using the NOAA/Rothfusz regression.
+
+    relative_humidity_pct defaults to 75%, DMI's published average
+    Danish summer relative humidity. This is a national assumption,
+    not a location-specific value - Denmark's humidity varies far
+    less by region than temperature does, so this is a reasonable
+    simplification, but it IS an approximation, not measured data.
+
+    Only valid for temperatures above ~27°C (80°F) - DMI's own
+    heat index calculator notes it applies for temps over 25°C and
+    humidity of at least 40%. Below that threshold, heat index and
+    air temperature are essentially the same, so we just return the
+    input temperature unchanged.
+    """
+    if temperature_c < 25 or relative_humidity_pct < 40:
+        return temperature_c
+
+    # Rothfusz regression works in Fahrenheit
+    t = temperature_c * 9 / 5 + 32
+    rh = relative_humidity_pct
+
+    hi_f = (
+        -42.379
+        + 2.04901523 * t
+        + 10.14333127 * rh
+        - 0.22475541 * t * rh
+        - 0.00683783 * t * t
+        - 0.05481717 * rh * rh
+        + 0.00122874 * t * t * rh
+        + 0.00085282 * t * rh * rh
+        - 0.00000199 * t * t * rh * rh
+    )
+
+    heat_index_c = (hi_f - 32) * 5 / 9
+    return round(heat_index_c, 1)
+
+
+def normalize_heat_index_change(reference_heat_index, future_heat_index):
+    """
+    Same scoring shape as normalize_temperature_change, but applied
+    to "feels like" temperature instead of raw air temperature.
+    """
+    return normalize_temperature_change(future_heat_index - reference_heat_index)
+
 
 def calculate_climate_exposure(
     heatwave_score,
