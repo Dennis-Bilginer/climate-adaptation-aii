@@ -25,6 +25,7 @@ from app.risk.flood import (
     categorize_risk as categorize_flood_risk,
 )
 from app.services.land_cover import get_heat_modifier, get_flood_modifier
+from app.services.terrain import get_terrain_flood_modifier
 
 
 
@@ -242,9 +243,12 @@ def run_assessment(
         cloudburst_score = normalize_cloudburst_change(reference_cloudburst, future_cloudburst)
 
         flood_land_cover = get_flood_modifier(address["longitude"], address["latitude"])
+        terrain_modifier = get_terrain_flood_modifier(address["longitude"], address["latitude"])
 
         flood_exposure = calculate_flood_exposure(
-            cloudburst_score, land_cover_adjustment=flood_land_cover["score_adjustment"]
+            cloudburst_score,
+            land_cover_adjustment=flood_land_cover["score_adjustment"],
+            terrain_adjustment=terrain_modifier["score_adjustment"],
         )
 
         stormraad_flag = bbr_data.get("stormraad_flood_risk") if "error" not in bbr_data else None
@@ -273,6 +277,11 @@ def run_assessment(
                 "category": flood_land_cover["dominant_category"],
                 "breakdown": flood_land_cover["category_breakdown"],
                 "adjustment_applied": flood_land_cover["score_adjustment"],
+            },
+            "terrain": {
+                "bluespot_fill_depth_m": terrain_modifier["bluespot_fill_depth_m"],
+                "flow_accumulation_m2": terrain_modifier["flow_accumulation_m2"],
+                "adjustment_applied": terrain_modifier["score_adjustment"],
             },
             "cloudburst_days": {
                 "reference": reference_cloudburst,

@@ -32,9 +32,8 @@ def normalize_cloudburst_change(reference_days, future_days):
         return 100
 
 
-def calculate_flood_exposure(cloudburst_score, land_cover_adjustment=0):
-    return max(0, min(100, cloudburst_score + land_cover_adjustment))
-
+def calculate_flood_exposure(cloudburst_score, land_cover_adjustment=0, terrain_adjustment=0):
+    return max(0, min(100, cloudburst_score + land_cover_adjustment + terrain_adjustment))
 
 def calculate_building_flood_susceptibility(basement, building_age, stormraad_risk_flag=None):
     """
