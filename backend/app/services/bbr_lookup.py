@@ -84,6 +84,7 @@ def get_bbr_building(address_text: str):
           byg021BygningensAnvendelse
           byg032YdervaeggensMateriale
           byg033Tagdaekningsmateriale
+          byg111StormraadetsOversvoemmelsesSelvrisiko
           id_lokalId
           husnummer
         }
@@ -128,6 +129,7 @@ def get_bbr_building(address_text: str):
         "roof_heat_risk": ROOF_MATERIAL_HEAT_RISK.get(
             main_building.get("byg033Tagdaekningsmateriale"), "unknown"
         ),
+        "stormraad_flood_risk": main_building.get("byg111StormraadetsOversvoemmelsesSelvrisiko"),
         "bbr_id": main_building.get("id_lokalId"),
     }
 

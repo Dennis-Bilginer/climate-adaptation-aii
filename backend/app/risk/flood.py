@@ -32,24 +32,16 @@ def normalize_cloudburst_change(reference_days, future_days):
         return 100
 
 
-def calculate_flood_exposure(cloudburst_score):
-    """
-    Single-indicator exposure for now — cloudburst days is our only
-    flood indicator so far. Structured as a function (not just the
-    raw score) so more precipitation indicators can be weighted in
-    later without changing the caller's interface.
-    """
-    return cloudburst_score
+def calculate_flood_exposure(cloudburst_score, land_cover_adjustment=0):
+    return max(0, min(100, cloudburst_score + land_cover_adjustment))
 
 
-def calculate_building_flood_susceptibility(basement, building_age):
+def calculate_building_flood_susceptibility(basement, building_age, stormraad_risk_flag=None):
     """
-    Flood-specific susceptibility factors differ from heat's —
-    a basement is a major flood risk factor, age matters less
-    directly than for heat (older drainage infrastructure is more
-    of a neighborhood-level factor than a building-level one, but
-    we treat pre-1960 buildings as slightly more susceptible here
-    as a rough proxy for older, less flood-resilient construction).
+    stormraad_risk_flag: raw value from BBR's byg111 field. If it
+    indicates real flood risk (non-null/non-zero), we treat this as
+    an authoritative override - Stormrådet's own assessment should
+    outweigh our derived model, so we floor susceptibility at 75.
     """
     score = 50
 
@@ -57,12 +49,16 @@ def calculate_building_flood_susceptibility(basement, building_age):
         score += 25
     elif basement is False:
         score -= 10
-    # basement is None (unknown) -> no adjustment, stays at 50
 
     if building_age < 1960:
         score += 5
 
-    return max(0, min(100, score))
+    score = max(0, min(100, score))
+
+    if stormraad_risk_flag not in (None, 0, "0"):
+        score = max(score, 75)
+
+    return score
 
 
 def calculate_flood_protection(has_flood_barriers, has_improved_drainage):

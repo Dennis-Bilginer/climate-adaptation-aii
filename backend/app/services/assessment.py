@@ -24,6 +24,7 @@ from app.risk.flood import (
     calculate_flood_risk,
     categorize_risk as categorize_flood_risk,
 )
+from app.services.land_cover import get_heat_modifier, get_flood_modifier
 
 
 
@@ -239,11 +240,19 @@ def run_assessment(
     flood_result = None
     if future_cloudburst is not None and reference_cloudburst is not None:
         cloudburst_score = normalize_cloudburst_change(reference_cloudburst, future_cloudburst)
-        flood_exposure = calculate_flood_exposure(cloudburst_score)
 
-        # basement not yet sourced from BBR — placeholder until wired in
+        flood_land_cover = get_flood_modifier(address["longitude"], address["latitude"])
+
+        flood_exposure = calculate_flood_exposure(
+            cloudburst_score, land_cover_adjustment=flood_land_cover["score_adjustment"]
+        )
+
+        stormraad_flag = bbr_data.get("stormraad_flood_risk") if "error" not in bbr_data else None
+
         flood_susceptibility = calculate_building_flood_susceptibility(
-            basement=None, building_age=building_age
+            basement=None,
+            building_age=building_age,
+            stormraad_risk_flag=stormraad_flag,
         )
         flood_protection = calculate_flood_protection(
             has_flood_barriers=False, has_improved_drainage=False
@@ -259,6 +268,12 @@ def run_assessment(
         flood_result = {
             "risk_score": round(flood_risk_score, 1),
             "risk_category": flood_category,
+            "stormraad_flood_flag": stormraad_flag,
+            "local_land_cover": {
+                "category": flood_land_cover["dominant_category"],
+                "breakdown": flood_land_cover["category_breakdown"],
+                "adjustment_applied": flood_land_cover["score_adjustment"],
+            },
             "cloudburst_days": {
                 "reference": reference_cloudburst,
                 "future": future_cloudburst,

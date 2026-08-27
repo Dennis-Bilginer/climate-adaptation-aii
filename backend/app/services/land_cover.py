@@ -179,3 +179,33 @@ if __name__ == "__main__":
     # Dyrehavevej 1 - address point sits on the road, but averaging
     # nearby pixels should now show some "cool" mixed in from the park
     print("Dyrehavevej 1:", get_heat_modifier(12.58742527, 55.77750907))
+
+FLOOD_CATEGORY_TO_SCORE_ADJUSTMENT = {
+    "hot": 8,        # paved/built-up -> impervious, poor drainage, higher runoff risk
+    "moderate": 0,   # agriculture/mixed -> neutral
+    "cool": -6,       # forest/nature -> absorbs water, reduces runoff
+    "coolest": 5,     # water bodies -> proximity to water/low-lying areas raises flood risk
+    "unknown": 0,
+}
+
+
+def get_flood_modifier(longitude: float, latitude: float, radius_pixels: int = 3):
+    """
+    Reuses the same land cover data as heat, but with flood-relevant
+    weights: paved surfaces worsen pluvial flood risk (poor
+    infiltration), while proximity to water bodies also raises risk
+    (low-lying, potential for overflow) rather than being purely
+    beneficial as it is for heat.
+    """
+    result = get_land_cover_area(longitude, latitude, radius_pixels=radius_pixels)
+
+    weighted_adjustment = 0
+    breakdown = result["category_breakdown"]
+    for category, pct in breakdown.items():
+        weighted_adjustment += FLOOD_CATEGORY_TO_SCORE_ADJUSTMENT.get(category, 0) * (pct / 100)
+
+    return {
+        "dominant_category": result["dominant_category"],
+        "category_breakdown": breakdown,
+        "score_adjustment": round(weighted_adjustment, 1),
+    }
